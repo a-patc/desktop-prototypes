@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Objects search — loading animation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="stage">
+  <div class="window-scaler" id="scaler">
+    <div class="window" id="window">
+
+      <!-- ───────────────────────── header ───────────────────────── -->
+      <div class="header">
+        <img class="tab-flat" style="left:-8px" src="assets/tab-home.svg" alt="">
+        <img class="tab-flat" style="left:47px" src="assets/tab-settings.svg" alt="">
+
+        <!-- active tab -->
+        <div class="tab tab--active" style="left:102px">
+          <img class="tab__curve tab__curve--l" src="assets/tab-curve-l.svg" alt="">
+          <img class="tab__curve tab__curve--r" src="assets/tab-curve-r.svg" alt="">
+          <div class="tab__fill"></div>
+          <img class="tab__icon" src="assets/object-tab.svg" alt="">
+          <p class="tab__label tab__label--active">Objects</p>
+          <img class="tab__close" src="assets/tab-close.svg" alt="">
+        </div>
+
+        <div class="tab" style="left:261px">
+          <img class="tab__icon" src="assets/playback-play.svg" alt="">
+          <p class="tab__label">Entrance</p>
+          <span class="tab__divider"></span>
+        </div>
+
+        <div class="tab" style="left:420px">
+          <img class="tab__icon" src="assets/map.svg" alt="">
+          <p class="tab__label">Floor 1 map</p>
+          <span class="tab__divider"></span>
+        </div>
+
+        <div class="hbtn hbtn--add" style="left:599px"><img src="assets/plus.svg" alt=""></div>
+
+        <div class="hbtn hbtn--bell" style="right:132px"><img src="assets/notification.svg" alt=""></div>
+        <div class="wbtn" style="right:84px"><img src="assets/win-minimize.svg" alt=""></div>
+        <div class="wbtn" style="right:44px"><img src="assets/win-maximize.svg" alt=""></div>
+        <div class="wbtn" style="right:4px"><img src="assets/win-close.svg" alt=""></div>
+
+        <span class="header__rule"></span>
+      </div>
+
+      <div class="subheader"></div>
+
+      <!-- ───────────────────────── body ───────────────────────── -->
+      <div class="body">
+
+        <!-- left: search parameters -->
+        <aside class="panel-left">
+          <p class="caps" style="top:16px">Mode</p>
+
+          <div class="mode-btn" style="left:16px">
+            <img src="assets/parameters.svg" alt="">
+            <p>AI metadata search</p>
+          </div>
+          <div class="mode-btn mode-btn--active" style="left:186px">
+            <img src="assets/ai.svg" alt="">
+            <p>Semantic search</p>
+            <span class="mode-btn__underline"></span>
+          </div>
+
+          <p class="caps caps--bright" style="top:132px">Search text</p>
+          <div class="textarea">
+            <p>Man in orange t-shirt carrying a box</p>
+            <span class="scrollbar"><span class="scrollbar__thumb" style="height:33%"></span></span>
+          </div>
+
+          <p class="caps" style="top:256px">Time</p>
+          <div class="ghost-btn" style="top:284px;width:332px">
+            <img src="assets/calendar.svg" alt=""><p>Any time</p>
+          </div>
+
+          <p class="caps" style="top:332px">cameras</p>
+          <div class="ghost-btn" style="top:360px;width:330px">
+            <img src="assets/cameras.svg" alt=""><p>All cameras</p>
+          </div>
+
+          <p class="caps" style="top:412px">Confidence level</p>
+          <div class="slider-block">
+            <div class="slider">
+              <span class="slider__bg"></span>
+              <span class="slider__fill"></span>
+              <span class="slider__tick" style="left:0px"></span>
+              <span class="slider__tick" style="left:83px"></span>
+              <span class="slider__tick" style="left:166px"></span>
+              <span class="slider__tick slider__tick--dim" style="left:249px"></span>
+              <span class="slider__tick slider__tick--dim" style="left:330px"></span>
+              <span class="slider__handle" style="left:166px"></span>
+            </div>
+            <p class="slider__label" style="left:0">Very low</p>
+            <p class="slider__label" style="right:0">Very high</p>
+          </div>
+
+          <span class="scrollbar scrollbar--panel"><span class="scrollbar__thumb" style="height:33%"></span></span>
+        </aside>
+
+        <!-- center: results / animation -->
+        <main class="panel-center" id="center">
+
+          <!-- state: idle -->
+          <section class="state state--idle is-visible" id="state-idle">
+            <div class="placeholder">
+              <img src="assets/ai-64.svg" alt="">
+              <p>Type in any text query and press [Enter]</p>
+            </div>
+          </section>
+
+          <!-- state: loading -->
+          <section class="state state--loading" id="state-loading">
+            <div class="drift" id="drift"></div>
+            <p class="panel-title panel-title--muted" id="loading-title">Searching...</p>
+            <button class="text-btn panel-action" id="btn-stop-header">
+              <span>Stop</span><img src="assets/playback-stop.svg" alt="">
+            </button>
+            <div class="loader-card" id="loader-card">
+              <p id="loader-card-text">Searching...</p>
+              <button class="text-btn" id="btn-stop-card">
+                <span id="loader-card-btn-text">Finish</span><img src="assets/playback-stop.svg" alt="">
+              </button>
+            </div>
+          </section>
+
+          <!-- state: results -->
+          <section class="state state--results" id="state-results">
+            <p class="panel-title">98 results</p>
+            <button class="icon-btn panel-action panel-action--icon" id="btn-restart" title="Search again">
+              <img src="assets/refresh.svg" alt="">
+            </button>
+            <div class="results" id="results"></div>
+          </section>
+
+        </main>
+
+        <!-- right: preview -->
+        <aside class="panel-right">
+          <p class="panel-title panel-title--dim">Object details</p>
+          <div class="placeholder placeholder--right">
+            <img src="assets/object-64.svg" alt="">
+            <p>Select an object from search results to see its details here</p>
+          </div>
+        </aside>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────────── demo controls (not part of the UI) ───────────────────── -->
+  <div class="demobar">
+    <button data-act="start">Start search</button>
+    <button data-act="stop">Stop</button>
+    <button data-act="reset">Reset</button>
+    <span class="demobar__sep"></span>
+    <span class="demobar__state" id="dbg-state">idle</span>
+    <span class="demobar__time" id="dbg-time">0.0s</span>
+    <span class="demobar__sep"></span>
+    <span class="demobar__label">Demo speed</span>
+    <button data-speed="1" class="is-on">1×</button>
+    <button data-speed="2">2×</button>
+    <button data-speed="4">4×</button>
+    <span class="demobar__hint">Enter — start · Esc — reset</span>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
