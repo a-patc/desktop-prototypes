@@ -9,10 +9,10 @@
     40s        search finishes by itself
 
    Every object fades in over the first half of its life and out over
-   the second half. Its drift is driven by the same curve — speed is
-   proportional to opacity — so it accelerates exactly as it appears,
-   is fastest at mid-life when fully visible, and has come to a stop by
-   the time it has faded back to zero.
+   the second half. Its drift is driven by the same curve, inverted —
+   the more visible it is, the slower it moves: it rushes in unseen,
+   settles to a standstill at mid-life when it is fully visible, then
+   accelerates away again as it fades out.
 
    "Stop" (at any moment, or the automatic finish at 40s) starts
    re-ranking: drift flips upwards, speed doubles, the loader tile
@@ -81,12 +81,14 @@ const smooth = p => p * p * (3 - 2 * p);   // ease-in-out
 // Opacity over a life: 0 → 1 across the first half, 1 → 0 across the second.
 const envelope = p => p < 0.5 ? smooth(p * 2) : smooth((1 - p) * 2);
 
-// Fraction of the travel covered by time p of the life. It is the integral of
-// `envelope` normalised to 1, so speed is proportional to opacity at every
-// instant: the object accelerates exactly as it appears, peaks at mid-life
-// with full opacity, and is standing still by the time it has faded out.
-const halfTravel = q => 8 * q * q * q * (1 - q);          // valid for q ≤ 0.5
-const travelled = p => p < 0.5 ? halfTravel(p) : 1 - halfTravel(1 - p);
+// Fraction of the travel covered by time p of the life. It is the normalised
+// integral of (1 - envelope), so speed runs *inverse* to opacity: the object
+// rushes in while it is still invisible, decelerates as it appears, comes to a
+// full stop at mid-life where it is brightest, then accelerates away as it
+// fades. Speed peaks at 2x the average at both ends and is 0 at the middle.
+const halfTravel = q => 8 * q * q * q * (1 - q);          // ∫envelope, q ≤ 0.5
+const integral = p => p < 0.5 ? halfTravel(p) : 1 - halfTravel(1 - p);
+const travelled = p => 2 * p - integral(p);
 const vary = (avg, pct) => Math.max(avg * 0.12, avg * (1 + (pct / 100) * rnd(-1, 1)));
 
 /* ── elements ─────────────────────────────────────────────── */
@@ -316,7 +318,7 @@ function stepField(dt) {
       o.p = Math.min(1, o.p + dt * rate / o.life);
 
       // one curve drives both: the ease spans the whole life and its speed
-      // tracks the fade, so zero opacity means zero movement
+      // runs inverse to the fade — full opacity means a standstill
       o.y += dir * o.dist * (travelled(o.p) - travelled(p0));
       draw(o, envelope(o.p));
 
