@@ -9,8 +9,10 @@
     40s        search finishes by itself
 
    Every object fades in over the first half of its life and out over
-   the second half; its drift accelerates while it appears and
-   decelerates while it disappears (ease-in-out over the whole life).
+   the second half. Its drift is driven by the same curve — speed is
+   proportional to opacity — so it accelerates exactly as it appears,
+   is fastest at mid-life when fully visible, and has come to a stop by
+   the time it has faded back to zero.
 
    "Stop" (at any moment, or the automatic finish at 40s) starts
    re-ranking: drift flips upwards, speed doubles, the loader tile
@@ -75,6 +77,16 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = arr => arr[(Math.random() * arr.length) | 0];
 const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
 const smooth = p => p * p * (3 - 2 * p);   // ease-in-out
+
+// Opacity over a life: 0 → 1 across the first half, 1 → 0 across the second.
+const envelope = p => p < 0.5 ? smooth(p * 2) : smooth((1 - p) * 2);
+
+// Fraction of the travel covered by time p of the life. It is the integral of
+// `envelope` normalised to 1, so speed is proportional to opacity at every
+// instant: the object accelerates exactly as it appears, peaks at mid-life
+// with full opacity, and is standing still by the time it has faded out.
+const halfTravel = q => 8 * q * q * q * (1 - q);          // valid for q ≤ 0.5
+const travelled = p => p < 0.5 ? halfTravel(p) : 1 - halfTravel(1 - p);
 const vary = (avg, pct) => Math.max(avg * 0.12, avg * (1 + (pct / 100) * rnd(-1, 1)));
 
 /* ── elements ─────────────────────────────────────────────── */
@@ -303,11 +315,10 @@ function stepField(dt) {
       const p0 = o.p;
       o.p = Math.min(1, o.p + dt * rate / o.life);
 
-      // ease-in-out over the whole life: accelerates in, decelerates out
-      o.y += dir * o.dist * (smooth(o.p) - smooth(p0));
-
-      // fade in over the first half of the life, out over the second
-      draw(o, o.p < 0.5 ? smooth(o.p * 2) : smooth((1 - o.p) * 2));
+      // one curve drives both: the ease spans the whole life and its speed
+      // tracks the fade, so zero opacity means zero movement
+      o.y += dir * o.dist * (travelled(o.p) - travelled(p0));
+      draw(o, envelope(o.p));
 
       if (o.p >= 1) { o.phase = 'off'; o.t = 0; o.node.style.opacity = '0'; }
     } else {
