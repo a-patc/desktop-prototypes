@@ -8,8 +8,9 @@
     30 – 40s   images  1 – 8
     40s        search finishes by itself
 
-   Every object appears over 1s and disappears over 1s (2s of life), and
-   its drift accelerates while it appears / decelerates while it fades.
+   Every object fades in over the first half of its life and out over
+   the second half; its drift accelerates while it appears and
+   decelerates while it disappears (ease-in-out over the whole life).
 
    "Stop" (at any moment, or the automatic finish at 40s) starts
    re-ranking: drift flips upwards, speed doubles, the loader tile
@@ -32,7 +33,7 @@ const timeOf = n => TIMES[(n * 3) % TIMES.length];
 const widthOf = (n, h) => Math.round(IMG_W[n] / NAT_H * h);
 
 const SEARCH_MS = 40000;   // full search
-const FINAL_MS = 5000;    // re-ranking after stop
+const FINAL_MS = 5000;     // re-ranking after stop
 
 const PHASES = [
   { at: 0, pool: null },                        // nothing found yet
@@ -47,32 +48,34 @@ const GROUPS = [
   { label: 'Medium', items: [9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20] }
 ];
 
-/* ── drift field geometry ─────────────────────────────────── */
+/* ── tunable field parameters (wired to the sliders) ──────── */
+
+const DEFAULTS = {
+  travel: 136,   // px  — how far an object drifts during its life
+  travelVar: 35,    // %   — spread around that distance
+  count: 14,    //     — how many objects live in the field
+  size: 180,   // px  — average object height
+  sizeVar: 20,    // %
+  life: 2,     // s   — appear + disappear
+  lifeVar: 30     // %
+};
+const params = { ...DEFAULTS };
+
+/* ── field geometry ───────────────────────────────────────── */
 
 const AREA_W = 786;          // center panel width
 const AREA_H = 904 - 56;     // below the panel header
 const PAD = 16;
-const COLS = 4;
-const COL_W = (AREA_W - PAD * 2) / COLS;
-const TILE_H = 180;
-const ROW_H = 280;           // vertical rhythm of the field
-const SPAN_PAD = 186;        // off-screen buffer above / below the field
-const ROWS = 5;
-const SPAN = ROWS * ROW_H;
-const OFF = TILE_H + SPAN_PAD;
-const SPEED = 68;            // px/s — constant drift, unaffected by demo speed
 const FINAL_SPEED_X = 2;     // ×2 and upwards while finalizing
-const EASE_MAX = 36;         // px, cap on the ease-in-out excursion
-const EDGE_FADE = 220;       // tile only reaches full opacity once it is fully inside
-const FILL = 0.9;            // chance a cell holds a tile at all
-const T_IN = 1;              // s — appearing
-const T_OUT = 1;             // s — disappearing (so every object lives exactly 2s)
+const GAP = [0.1, 1.2];      // s — pause before an object reappears
+const PLACE_TRIES = 14;      // candidate spots tried on every respawn
 const PEAKS = [0.3, 0.6, 0.9];
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = arr => arr[(Math.random() * arr.length) | 0];
 const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
 const smooth = p => p * p * (3 - 2 * p);   // ease-in-out
+const vary = (avg, pct) => Math.max(avg * 0.12, avg * (1 + (pct / 100) * rnd(-1, 1)));
 
 /* ── elements ─────────────────────────────────────────────── */
 
@@ -95,20 +98,20 @@ const el = {
 /* ── window scaling ───────────────────────────────────────── */
 
 function fit() {
-  const s = Math.min(1, (innerWidth - 48) / 1638, (innerHeight - 140) / 960);
+  const chrome = document.querySelector('.panelbar').offsetHeight + 56;
+  const s = Math.min(1, (innerWidth - 48) / 1638, (innerHeight - chrome) / 960);
   el.window.style.transform = `scale(${s})`;
   el.scaler.style.width = 1638 * s + 'px';
   el.scaler.style.height = 960 * s + 'px';
 }
 addEventListener('resize', fit);
-fit();
 
 /* ── state machine ────────────────────────────────────────── */
 
 let mode = 'idle';        // idle | search | final | results
 let clock = 0;            // ms into the search
 let finalClock = 0;       // ms into re-ranking
-let speedMult = 1;        // demo fast-forward
+let speedMult = 1;        // demo fast-forward (timeline only)
 
 function currentPool() {
   let pool = null;
@@ -156,9 +159,9 @@ function reset() {
 
 /* ── drift field ──────────────────────────────────────────── */
 
-const cells = [];
+const objs = [];
 
-function makeCell(row, col) {
+function makeObject() {
   const node = document.createElement('div');
   node.className = 'dtile';
 
@@ -181,106 +184,128 @@ function makeCell(row, col) {
   node.append(img, icon, time, badge);
   el.drift.appendChild(node);
 
-  const cell = {
-    row, col, node, img, icon, time, badge,
-    x: 0, y: 0, yJit: 0, w: 90,
-    peak: 0.4, phase: 'off', t: 0, tIn: T_IN, tHold: 0, tOut: T_OUT, tOff: 1
+  const o = {
+    node, img, icon, time, badge,
+    x: 0, y: 0, w: 90, h: 180,
+    dist: 136, life: 2, peak: 0.6,
+    phase: 'off', p: 0, t: 0, tOff: 0
   };
-  cells.push(cell);
-  return cell;
+  objs.push(o);
+  spawn(o);
+  return o;
 }
 
-for (let r = 0; r < ROWS; r++) {
-  for (let c = 0; c < COLS; c++) makeCell(r, c);
+function ensureCount() {
+  const want = Math.round(params.count);
+  while (objs.length < want) makeObject();
+  while (objs.length > want) objs.pop().node.remove();
 }
 
-// give a cell a fresh look: image (or placeholder), size, position, opacity peak
-function dress(cell) {
+// area shared by two rectangles — used to keep respawns from stacking up
+function overlap(ax, ay, aw, ah, bx, by, bw, bh) {
+  const w = Math.min(ax + aw, bx + bw) - Math.max(ax, bx);
+  const h = Math.min(ay + ah, by + bh) - Math.max(ay, by);
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
+// pick the emptiest of a handful of random spots
+function place(o) {
+  const maxX = Math.max(0, AREA_W - PAD * 2 - o.w);
+  const room = AREA_H - o.h - o.dist - 16;   // can it live out its whole travel inside?
+  let best = [PAD, 8], bestScore = Infinity;
+
+  for (let i = 0; i < PLACE_TRIES; i++) {
+    const x = PAD + rnd(0, maxX);
+    const y = room > 0 ? rnd(8, 8 + room) : rnd(-o.h * 0.25, AREA_H - o.h * 0.75);
+
+    let score = 0;
+    for (const other of objs) {
+      if (other === o || other.phase !== 'on') continue;
+      score += overlap(x - 6, y - 6, o.w + 12, o.h + 12,
+        other.x, other.y, other.w, other.h);
+    }
+    if (score < bestScore) { bestScore = score; best = [x, y]; if (!score) break; }
+  }
+  o.x = best[0];
+  o.y = best[1];
+}
+
+// give an object a fresh look: image (or placeholder), size, distance, life, spot
+function spawn(o) {
   const pool = currentPool();
-  cell.present = Math.random() < FILL;
+
+  o.life = vary(params.life, params.lifeVar);
+  o.dist = vary(params.travel, params.travelVar);
+  o.h = Math.round(vary(params.size, params.sizeVar));
 
   if (!pool) {
-    cell.node.className = 'dtile dtile--empty';
-    cell.img.style.display = 'none';
-    cell.icon.style.display = 'block';
-    cell.time.style.display = 'none';
-    cell.badge.style.display = 'none';
-    cell.w = Math.round(rnd(68, 112));
-    cell.peak = rnd(0.3, 0.5);
+    o.node.className = 'dtile dtile--empty';
+    o.img.style.display = 'none';
+    o.icon.style.display = 'block';
+    o.time.style.display = 'none';
+    o.badge.style.display = 'none';
+    o.w = Math.round(o.h * rnd(0.38, 0.62));
+    o.peak = rnd(0.3, 0.5);
   } else {
     const n = pick(pool);
-    cell.node.className = 'dtile';
-    cell.img.src = src(n);
-    cell.img.style.display = 'block';
-    cell.icon.style.display = 'none';
-    cell.time.textContent = timeOf(n);
-    cell.time.style.display = 'block';
-    cell.badge.style.display = Math.random() < 0.12 ? 'block' : 'none';
-    cell.w = widthOf(n, TILE_H);
-    cell.peak = pick(PEAKS);
+    o.node.className = 'dtile';
+    o.img.src = src(n);
+    o.img.style.display = 'block';
+    o.icon.style.display = 'none';
+    o.time.textContent = timeOf(n);
+    o.time.style.display = o.h >= 100 ? 'block' : 'none';
+    o.badge.style.display = o.h >= 120 && Math.random() < 0.12 ? 'block' : 'none';
+    o.w = widthOf(n, o.h);
+    o.peak = pick(PEAKS);
   }
 
-  cell.node.style.width = cell.w + 'px';
-  cell.x = PAD + cell.col * COL_W + rnd(0, Math.max(0, COL_W - cell.w));
-  cell.yJit = rnd(-16, 16);
+  const iconSize = Math.round(Math.min(40, o.h * 0.24));
+  o.icon.style.width = o.icon.style.height = iconSize + 'px';
+  o.node.style.width = o.w + 'px';
+  o.node.style.height = o.h + 'px';
 
-  cell.tIn = T_IN;
-  cell.tHold = 0;
-  cell.tOut = T_OUT;
-  cell.tOff = rnd(0.1, 1.2);   // pause before it reappears somewhere else
-  cell.phase = 'on';
-  cell.t = 0;
+  place(o);
+  o.phase = 'on';
+  o.p = 0;
+  o.t = 0;
+  o.tOff = rnd(GAP[0], GAP[1]);
 }
 
 function resetField() {
-  scroll = 0;
-  for (const cell of cells) {
-    cell.slot = cell.row * ROW_H;
-    dress(cell);
-    // stagger the blink cycles so nothing pops in unison
-    cell.t = rnd(0, cell.tIn + cell.tHold + cell.tOut);
+  ensureCount();
+  for (const o of objs) {
+    spawn(o);
+    o.p = Math.random();          // stagger, so they don't all pulse together
   }
 }
 
-let scroll = 0;
-resetField();
+function draw(o, env) {
+  // a tile hanging over the edge of the panel fades out instead of being clipped
+  const edge = Math.min((o.y + o.h) / (o.h + 40), (AREA_H - o.y) / (o.h + 40), 1);
+  o.node.style.transform = `translate3d(${o.x.toFixed(1)}px, ${o.y.toFixed(1)}px, 0)`;
+  o.node.style.opacity = (o.peak * env * clamp01(edge)).toFixed(3);
+}
 
 function stepField(dt) {
   const dir = mode === 'final' ? -1 : 1;
-  const spd = SPEED * (mode === 'final' ? FINAL_SPEED_X : 1) * dir;
+  const rate = mode === 'final' ? FINAL_SPEED_X : 1;
 
-  scroll = (((scroll + spd * dt) % SPAN) + SPAN) % SPAN;
+  for (const o of objs) {
+    if (o.phase === 'on') {
+      const p0 = o.p;
+      o.p = Math.min(1, o.p + dt * rate / o.life);
 
-  for (const cell of cells) {
-    // opacity envelope: fade in → hold → fade out → gone for a while → new tile
-    cell.t += dt;
-    let env = 0, ease = 0;
+      // ease-in-out over the whole life: accelerates in, decelerates out
+      o.y += dir * o.dist * (smooth(o.p) - smooth(p0));
 
-    if (cell.phase === 'on') {
-      const life = cell.tIn + cell.tHold + cell.tOut;
-      if (cell.t >= life) { cell.phase = 'off'; cell.t = 0; }
-      else {
-        const p = cell.t / life;
-        // ease-in-out on top of the constant drift: accelerates while it appears,
-        // decelerates while it disappears — still ends up exactly on its slot
-        ease = Math.max(-EASE_MAX, Math.min(EASE_MAX, spd * life * (smooth(p) - p)));
-        if (cell.t < cell.tIn) env = smooth(cell.t / cell.tIn);
-        else if (cell.t < cell.tIn + cell.tHold) env = 1;
-        else env = smooth(1 - (cell.t - cell.tIn - cell.tHold) / cell.tOut);
-      }
-    } else if (cell.t >= cell.tOff) {
-      dress(cell);                       // reappears somewhere else, with fresh content
+      // fade in over the first half of the life, out over the second
+      draw(o, o.p < 0.5 ? smooth(o.p * 2) : smooth((1 - o.p) * 2));
+
+      if (o.p >= 1) { o.phase = 'off'; o.t = 0; o.node.style.opacity = '0'; }
+    } else {
+      o.t += dt * rate;
+      if (o.t >= o.tOff) spawn(o);   // reappears somewhere else, with fresh content
     }
-    if (!cell.present) env = 0;
-
-    // slot position wraps far outside the field, so tiles never jump in view
-    const y = (((cell.slot + scroll) % SPAN) + SPAN) % SPAN - OFF + cell.yJit + ease;
-
-    // never let a tile blink in or out right at the edge of the field
-    const edge = Math.min((y + TILE_H) / EDGE_FADE, (AREA_H - y) / EDGE_FADE, 1);
-
-    cell.node.style.transform = `translate3d(${cell.x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
-    cell.node.style.opacity = (cell.peak * env * clamp01(edge)).toFixed(3);
   }
 }
 
@@ -314,7 +339,6 @@ function frame(now) {
 
   requestAnimationFrame(frame);
 }
-requestAnimationFrame(frame);
 
 /* ── final results ────────────────────────────────────────── */
 
@@ -340,7 +364,55 @@ function buildResults() {
   }
   el.results.appendChild(frag);
 }
-buildResults();
+
+/* ── parameter sliders ────────────────────────────────────── */
+
+const CONTROLS = [
+  { key: 'travel', label: 'Travel distance', min: 20, max: 700, step: 10, unit: 'px' },
+  { key: 'travelVar', label: 'Travel variability', min: 0, max: 100, step: 5, unit: '%' },
+  { key: 'count', label: 'Number of objects', min: 1, max: 48, step: 1, unit: '' },
+  { key: 'size', label: 'Object size', min: 60, max: 320, step: 10, unit: 'px' },
+  { key: 'sizeVar', label: 'Size variability', min: 0, max: 80, step: 5, unit: '%' },
+  { key: 'life', label: 'Life time', min: 0.4, max: 10, step: 0.1, unit: 's' },
+  { key: 'lifeVar', label: 'Life variability', min: 0, max: 80, step: 5, unit: '%' }
+];
+
+function paintControl(c) {
+  const v = params[c.key];
+  document.getElementById('val-' + c.key).textContent =
+    (c.step < 1 ? v.toFixed(1) : v) + (c.unit ? ' ' + c.unit : '');
+}
+
+function buildControls() {
+  const host = document.getElementById('sliders');
+  for (const c of CONTROLS) {
+    const wrap = document.createElement('label');
+    wrap.className = 'ctl';
+    wrap.innerHTML =
+      `<span class="ctl__top"><span class="ctl__name">${c.label}</span>` +
+      `<span class="ctl__val" id="val-${c.key}"></span></span>` +
+      `<input type="range" id="in-${c.key}" min="${c.min}" max="${c.max}" step="${c.step}">`;
+    host.appendChild(wrap);
+
+    const input = wrap.querySelector('input');
+    input.value = params[c.key];
+    input.addEventListener('input', () => {
+      params[c.key] = Number(input.value);
+      if (c.key === 'count') ensureCount();
+      paintControl(c);
+    });
+    paintControl(c);
+  }
+}
+
+function resetParams() {
+  Object.assign(params, DEFAULTS);
+  for (const c of CONTROLS) {
+    document.getElementById('in-' + c.key).value = params[c.key];
+    paintControl(c);
+  }
+  ensureCount();
+}
 
 /* ── controls ─────────────────────────────────────────────── */
 
@@ -349,22 +421,32 @@ document.getElementById('btn-stop-card').onclick = startFinalizing;
 document.getElementById('btn-restart').onclick = startSearch;
 
 addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
   if (e.key === 'Enter') { if (mode === 'idle' || mode === 'results') startSearch(); }
   else if (e.key === 'Escape') reset();
   else if (e.key === ' ' && mode === 'search') { e.preventDefault(); startFinalizing(); }
 });
 
-document.querySelector('.demobar').addEventListener('click', e => {
+document.querySelector('.panelbar').addEventListener('click', e => {
   const btn = e.target.closest('button');
   if (!btn) return;
 
   if (btn.dataset.speed) {
     speedMult = Number(btn.dataset.speed);
-    for (const b of document.querySelectorAll('.demobar [data-speed]')) b.classList.remove('is-on');
+    for (const b of document.querySelectorAll('[data-speed]')) b.classList.remove('is-on');
     btn.classList.add('is-on');
     return;
   }
   if (btn.dataset.act === 'start') startSearch();
   if (btn.dataset.act === 'stop') startFinalizing();
   if (btn.dataset.act === 'reset') reset();
+  if (btn.dataset.act === 'defaults') resetParams();
 });
+
+/* ── go ───────────────────────────────────────────────────── */
+
+buildResults();
+buildControls();
+resetField();
+fit();
+requestAnimationFrame(frame);

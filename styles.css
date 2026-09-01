@@ -417,7 +417,6 @@ html, body {
 .dtile {
   position: absolute;
   left: 0; top: 0;
-  height: 180px;
   border-radius: 4px;
   overflow: hidden;
   opacity: 0;
@@ -544,18 +543,72 @@ html, body {
 
 /* ───────────────────── demo controls ───────────────────── */
 
-.demobar {
-  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px;
-  max-width: 100%;
-  white-space: nowrap;
-  padding: 8px 12px;
-  border-radius: 8px;
+.panelbar {
+  width: min(1100px, calc(100vw - 48px));
+  padding: 10px 12px 12px;
+  border-radius: 10px;
   background: rgba(0,0,0,0.28);
   font-size: 12px;
   color: rgba(255,255,255,0.6);
   user-select: none;
 }
-.demobar button {
+
+.demobar {
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px;
+  white-space: nowrap;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.sliders {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px 18px;
+  padding: 10px 2px 8px;
+}
+
+.ctl { display: flex; flex-direction: column; gap: 1px; }
+.ctl__top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ctl__name { color: rgba(255,255,255,0.55); }
+.ctl__val {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.ctl input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 18px;
+  background: transparent;
+  cursor: pointer;
+}
+.ctl input[type="range"]::-webkit-slider-runnable-track {
+  height: 2px; border-radius: 2px;
+  background: rgba(255,255,255,0.21);
+}
+.ctl input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 12px; height: 12px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.38);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+.ctl input[type="range"]::-moz-range-track {
+  height: 2px; border-radius: 2px;
+  background: rgba(255,255,255,0.21);
+}
+.ctl input[type="range"]::-moz-range-thumb {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.38);
+}
+
+.panelbar__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  color: rgba(255,255,255,0.35);
+}
+.panelbar button {
   padding: 5px 10px;
   border: 1px solid rgba(255,255,255,0.14);
   border-radius: 5px;
@@ -565,8 +618,8 @@ html, body {
   font-size: 12px;
   cursor: pointer;
 }
-.demobar button:hover { background: rgba(255,255,255,0.08); }
-.demobar button.is-on {
+.panelbar button:hover { background: rgba(255,255,255,0.08); }
+.panelbar button.is-on {
   background: rgba(255,255,255,0.12);
   color: #fff;
   border-color: transparent;
