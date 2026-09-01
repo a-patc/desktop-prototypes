@@ -54,7 +54,7 @@ const DEFAULTS = {
   travel: 136,   // px  — how far an object drifts during its life
   travelVar: 35,    // %   — spread around that distance
   count: 14,    //     — how many objects live in the field
-  size: 180,   // px  — average object height
+  size: 135,   // px  — side of an equal-area square (all objects get the same area)
   sizeVar: 20,    // %
   life: 2,     // s   — appear + disappear
   lifeVar: 30     // %
@@ -64,7 +64,7 @@ const params = { ...DEFAULTS };
 /* ── field geometry ───────────────────────────────────────── */
 
 const AREA_W = 786;          // center panel width
-const AREA_H = 904 - 56;     // below the panel header
+const AREA_H = 904;          // the field owns the whole panel now
 const PAD = 16;
 const FINAL_SPEED_X = 2;     // ×2 and upwards while finalizing
 const GAP = [0.1, 1.2];      // s — pause before an object reappears
@@ -87,7 +87,6 @@ const el = {
   idle: document.getElementById('state-idle'),
   loading: document.getElementById('state-loading'),
   resultsState: document.getElementById('state-results'),
-  loadingTitle: document.getElementById('loading-title'),
   card: document.getElementById('loader-card'),
   cardText: document.getElementById('loader-card-text'),
   cardBtnText: document.getElementById('loader-card-btn-text'),
@@ -128,7 +127,6 @@ function startSearch() {
   clock = 0;
   finalClock = 0;
   mode = 'search';
-  el.loadingTitle.textContent = 'Searching...';
   el.cardText.textContent = 'Searching...';
   el.cardBtnText.textContent = 'Finish';
   el.card.classList.remove('is-final');
@@ -140,7 +138,6 @@ function startFinalizing() {
   if (mode !== 'search') return;
   mode = 'final';
   finalClock = 0;
-  el.loadingTitle.textContent = 'Finalizing results...';
   el.cardText.textContent = 'Finalizing results...';
   el.card.classList.add('is-final');
 }
@@ -236,7 +233,11 @@ function spawn(o) {
 
   o.life = vary(params.life, params.lifeVar);
   o.dist = vary(params.travel, params.travelVar);
-  o.h = Math.round(vary(params.size, params.sizeVar));
+
+  // every object covers the same surface, whatever its aspect ratio:
+  // side² = w × h, so h = side / √aspect and w = side × √aspect
+  const side = vary(params.size, params.sizeVar);
+  let aspect;
 
   if (!pool) {
     o.node.className = 'dtile dtile--empty';
@@ -244,7 +245,7 @@ function spawn(o) {
     o.icon.style.display = 'block';
     o.time.style.display = 'none';
     o.badge.style.display = 'none';
-    o.w = Math.round(o.h * rnd(0.38, 0.62));
+    aspect = rnd(0.38, 0.72);
     o.peak = rnd(0.3, 0.5);
   } else {
     const n = pick(pool);
@@ -253,10 +254,17 @@ function spawn(o) {
     o.img.style.display = 'block';
     o.icon.style.display = 'none';
     o.time.textContent = timeOf(n);
+    aspect = IMG_W[n] / NAT_H;
+    o.peak = pick(PEAKS);
+  }
+
+  const k = Math.sqrt(aspect);
+  o.h = Math.round(Math.min(side / k, AREA_H - 40));
+  o.w = Math.round(o.h * aspect);
+
+  if (pool) {
     o.time.style.display = o.h >= 100 ? 'block' : 'none';
     o.badge.style.display = o.h >= 120 && Math.random() < 0.12 ? 'block' : 'none';
-    o.w = widthOf(n, o.h);
-    o.peak = pick(PEAKS);
   }
 
   const iconSize = Math.round(Math.min(40, o.h * 0.24));
@@ -371,7 +379,7 @@ const CONTROLS = [
   { key: 'travel', label: 'Travel distance', min: 20, max: 700, step: 10, unit: 'px' },
   { key: 'travelVar', label: 'Travel variability', min: 0, max: 100, step: 5, unit: '%' },
   { key: 'count', label: 'Number of objects', min: 1, max: 48, step: 1, unit: '' },
-  { key: 'size', label: 'Object size', min: 60, max: 320, step: 10, unit: 'px' },
+  { key: 'size', label: 'Object size (area)', min: 40, max: 280, step: 5, unit: 'px' },
   { key: 'sizeVar', label: 'Size variability', min: 0, max: 80, step: 5, unit: '%' },
   { key: 'life', label: 'Life time', min: 0.4, max: 10, step: 0.1, unit: 's' },
   { key: 'lifeVar', label: 'Life variability', min: 0, max: 80, step: 5, unit: '%' }
@@ -416,7 +424,6 @@ function resetParams() {
 
 /* ── controls ─────────────────────────────────────────────── */
 
-document.getElementById('btn-stop-header').onclick = startFinalizing;
 document.getElementById('btn-stop-card').onclick = startFinalizing;
 document.getElementById('btn-restart').onclick = startSearch;
 
