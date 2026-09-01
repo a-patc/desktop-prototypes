@@ -8,6 +8,9 @@
     30 – 40s   images  1 – 8
     40s        search finishes by itself
 
+   Every object appears over 1s and disappears over 1s (2s of life), and
+   its drift accelerates while it appears / decelerates while it fades.
+
    "Stop" (at any moment, or the automatic finish at 40s) starts
    re-ranking: drift flips upwards, speed doubles, the loader tile
    reads "Finalizing results..." and after 5s the final results show.
@@ -60,8 +63,10 @@ const OFF = TILE_H + SPAN_PAD;
 const SPEED = 68;            // px/s — constant drift, unaffected by demo speed
 const FINAL_SPEED_X = 2;     // ×2 and upwards while finalizing
 const EASE_MAX = 36;         // px, cap on the ease-in-out excursion
-const EDGE_FADE = 120;       // px of fade at the top / bottom of the field
-const FILL = 0.72;           // chance a cell holds a tile at all
+const EDGE_FADE = 220;       // tile only reaches full opacity once it is fully inside
+const FILL = 0.9;            // chance a cell holds a tile at all
+const T_IN = 1;              // s — appearing
+const T_OUT = 1;             // s — disappearing (so every object lives exactly 2s)
 const PEAKS = [0.3, 0.6, 0.9];
 
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -179,7 +184,7 @@ function makeCell(row, col) {
   const cell = {
     row, col, node, img, icon, time, badge,
     x: 0, y: 0, yJit: 0, w: 90,
-    peak: 0.4, phase: 'off', t: 0, tIn: 0.9, tHold: 3, tOut: 1.2, tOff: 1
+    peak: 0.4, phase: 'off', t: 0, tIn: T_IN, tHold: 0, tOut: T_OUT, tOff: 1
   };
   cells.push(cell);
   return cell;
@@ -201,7 +206,7 @@ function dress(cell) {
     cell.time.style.display = 'none';
     cell.badge.style.display = 'none';
     cell.w = Math.round(rnd(68, 112));
-    cell.peak = rnd(0.2, 0.34);
+    cell.peak = rnd(0.3, 0.5);
   } else {
     const n = pick(pool);
     cell.node.className = 'dtile';
@@ -217,55 +222,61 @@ function dress(cell) {
 
   cell.node.style.width = cell.w + 'px';
   cell.x = PAD + cell.col * COL_W + rnd(0, Math.max(0, COL_W - cell.w));
-  cell.yJit = rnd(-26, 26);
+  cell.yJit = rnd(-16, 16);
 
-  cell.tIn = rnd(0.7, 1.2);
-  cell.tHold = rnd(1.4, 4.6);
-  cell.tOut = rnd(1.0, 1.8);
-  cell.tOff = rnd(0.3, 2.6);
+  cell.tIn = T_IN;
+  cell.tHold = 0;
+  cell.tOut = T_OUT;
+  cell.tOff = rnd(0.1, 1.2);   // pause before it reappears somewhere else
   cell.phase = 'on';
   cell.t = 0;
 }
 
 function resetField() {
+  scroll = 0;
   for (const cell of cells) {
-    cell.y = cell.row * ROW_H - TILE_H + 12;
+    cell.slot = cell.row * ROW_H;
     dress(cell);
     // stagger the blink cycles so nothing pops in unison
     cell.t = rnd(0, cell.tIn + cell.tHold + cell.tOut);
   }
 }
-resetField();
 
-const span = ROWS * ROW_H;
+let scroll = 0;
+resetField();
 
 function stepField(dt) {
   const dir = mode === 'final' ? -1 : 1;
-  const dy = SPEED * (mode === 'final' ? FINAL_SPEED_X : 1) * dir * dt;
+  const spd = SPEED * (mode === 'final' ? FINAL_SPEED_X : 1) * dir;
+
+  scroll = (((scroll + spd * dt) % SPAN) + SPAN) % SPAN;
 
   for (const cell of cells) {
-    cell.y += dy;
-
-    // wrap around — always happens while the tile is fully outside the field
-    if (cell.y > AREA_H) { cell.y -= span; dress(cell); cell.t = 0; cell.phase = 'off'; }
-    else if (cell.y + TILE_H < 0) { cell.y += span; dress(cell); cell.t = 0; cell.phase = 'off'; }
-
     // opacity envelope: fade in → hold → fade out → gone for a while → new tile
     cell.t += dt;
-    let env = 0;
+    let env = 0, ease = 0;
+
     if (cell.phase === 'on') {
-      if (cell.t < cell.tIn) env = cell.t / cell.tIn;
-      else if (cell.t < cell.tIn + cell.tHold) env = 1;
-      else if (cell.t < cell.tIn + cell.tHold + cell.tOut) env = 1 - (cell.t - cell.tIn - cell.tHold) / cell.tOut;
-      else { cell.phase = 'off'; cell.t = 0; env = 0; }
+      const life = cell.tIn + cell.tHold + cell.tOut;
+      if (cell.t >= life) { cell.phase = 'off'; cell.t = 0; }
+      else {
+        const p = cell.t / life;
+        // ease-in-out on top of the constant drift: accelerates while it appears,
+        // decelerates while it disappears — still ends up exactly on its slot
+        ease = Math.max(-EASE_MAX, Math.min(EASE_MAX, spd * life * (smooth(p) - p)));
+        if (cell.t < cell.tIn) env = smooth(cell.t / cell.tIn);
+        else if (cell.t < cell.tIn + cell.tHold) env = 1;
+        else env = smooth(1 - (cell.t - cell.tIn - cell.tHold) / cell.tOut);
+      }
     } else if (cell.t >= cell.tOff) {
       dress(cell);                       // reappears somewhere else, with fresh content
-      env = 0;
     }
     if (!cell.present) env = 0;
 
+    // slot position wraps far outside the field, so tiles never jump in view
+    const y = (((cell.slot + scroll) % SPAN) + SPAN) % SPAN - OFF + cell.yJit + ease;
+
     // never let a tile blink in or out right at the edge of the field
-    const y = cell.y + cell.yJit;
     const edge = Math.min((y + TILE_H) / EDGE_FADE, (AREA_H - y) / EDGE_FADE, 1);
 
     cell.node.style.transform = `translate3d(${cell.x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
@@ -278,19 +289,19 @@ function stepField(dt) {
 let last = performance.now();
 
 function frame(now) {
-  // the timeline follows wall clock, the field never jumps more than one 20fps step
-  const dt = Math.min(0.5, (now - last) / 1000) * speedMult;
+  // the drift runs on wall clock; only the search timeline honours the demo speed
+  const dt = Math.min(0.5, (now - last) / 1000);
   last = now;
 
   if (mode === 'search') {
-    clock += dt * 1000;
+    clock += dt * speedMult * 1000;
     if (clock >= SEARCH_MS) { clock = SEARCH_MS; startFinalizing(); }
   } else if (mode === 'final') {
-    finalClock += dt * 1000;
+    finalClock += dt * speedMult * 1000;
     if (finalClock >= FINAL_MS) showResults();
   }
 
-  if (mode === 'search' || mode === 'final') stepField(Math.min(dt, 0.05));
+  if (mode === 'search' || mode === 'final') stepField(Math.min(dt, 0.1));
 
   el.dbgState.textContent =
     mode === 'search' ? (currentPool() ? 'searching' : 'searching (no hits)')
