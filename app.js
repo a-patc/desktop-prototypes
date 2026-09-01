@@ -9,10 +9,10 @@
     40s        search finishes by itself
 
    Every object fades in over the first half of its life and out over
-   the second half. Its drift is driven by the same curve, inverted —
-   the more visible it is, the slower it moves: it rushes in unseen,
-   settles to a standstill at mid-life when it is fully visible, then
-   accelerates away again as it fades out.
+   the second half, and is placed by where it sits at mid-life so the
+   field stays evenly spread however far the objects travel. The
+   `Easing` control ties drift speed to opacity: +1 fastest when
+   brightest, 0 constant, -1 standing still when brightest.
 
    "Stop" (at any moment, or the automatic finish at 40s) starts
    re-ranking: drift flips upwards, speed doubles, the loader tile
@@ -53,13 +53,14 @@ const GROUPS = [
 /* ── tunable field parameters (wired to the sliders) ──────── */
 
 const DEFAULTS = {
-  travel: 136,   // px  — how far an object drifts during its life
+  travel: 400,   // px  — how far an object drifts during its life
   travelVar: 35,    // %   — spread around that distance
   count: 14,    //     — how many objects live in the field
   size: 135,   // px  — side of an equal-area square (all objects get the same area)
   sizeVar: 20,    // %
-  life: 2,     // s   — appear + disappear
-  lifeVar: 30     // %
+  life: 4,     // s   — appear + disappear
+  lifeVar: 30,    // %
+  ease: -1      // -1 … +1 — how speed relates to opacity (see `travelled`)
 };
 const params = { ...DEFAULTS };
 
@@ -81,14 +82,20 @@ const smooth = p => p * p * (3 - 2 * p);   // ease-in-out
 // Opacity over a life: 0 → 1 across the first half, 1 → 0 across the second.
 const envelope = p => p < 0.5 ? smooth(p * 2) : smooth((1 - p) * 2);
 
-// Fraction of the travel covered by time p of the life. It is the normalised
-// integral of (1 - envelope), so speed runs *inverse* to opacity: the object
-// rushes in while it is still invisible, decelerates as it appears, comes to a
-// full stop at mid-life where it is brightest, then accelerates away as it
-// fades. Speed peaks at 2x the average at both ends and is 0 at the middle.
+// Fraction of the travel covered by time p of the life, blended by `ease`:
+//
+//   +1   speed follows opacity — accelerates in from a standstill, fastest at
+//        mid-life where it is brightest, stops again as it fades out
+//    0   constant speed
+//   -1   speed runs inverse to opacity — rushes in unseen, stands still at
+//        mid-life when fully visible, accelerates away as it fades
+//
+// Speed stays within 1 ± |ease| of the average, so the curve never goes
+// backwards; whatever the setting, the object covers exactly its travel over
+// exactly one life and is half way at mid-life.
 const halfTravel = q => 8 * q * q * q * (1 - q);          // ∫envelope, q ≤ 0.5
 const integral = p => p < 0.5 ? halfTravel(p) : 1 - halfTravel(1 - p);
-const travelled = p => 2 * p - integral(p);
+const travelled = p => p + params.ease * (integral(p) - p);
 const vary = (avg, pct) => Math.max(avg * 0.12, avg * (1 + (pct / 100) * rnd(-1, 1)));
 
 /* ── elements ─────────────────────────────────────────────── */
@@ -197,7 +204,7 @@ function makeObject() {
 
   const o = {
     node, img, icon, time, badge,
-    x: 0, y: 0, w: 90, h: 180,
+    x: 0, y: 0, yMid: 0, w: 90, h: 180,
     dist: 136, life: 2, peak: 0.6,
     phase: 'off', p: 0, t: 0, tOff: 0
   };
@@ -219,26 +226,32 @@ function overlap(ax, ay, aw, ah, bx, by, bw, bh) {
   return w > 0 && h > 0 ? w * h : 0;
 }
 
-// pick the emptiest of a handful of random spots
+// Objects are placed by where they sit at MID-LIFE — the instant they are
+// fully visible and standing still — spread evenly over the whole panel. The
+// travel is then hung symmetrically around that point, so a long travel simply
+// means the first / last stretch happens off-panel for objects near an edge,
+// instead of squeezing every object towards the middle.
 function place(o) {
+  const dir = mode === 'final' ? -1 : 1;
   const maxX = Math.max(0, AREA_W - PAD * 2 - o.w);
-  const room = AREA_H - o.h - o.dist - 16;   // can it live out its whole travel inside?
+  const maxY = Math.max(0, AREA_H - o.h - 16);
   let best = [PAD, 8], bestScore = Infinity;
 
   for (let i = 0; i < PLACE_TRIES; i++) {
     const x = PAD + rnd(0, maxX);
-    const y = room > 0 ? rnd(8, 8 + room) : rnd(-o.h * 0.25, AREA_H - o.h * 0.75);
+    const yMid = 8 + rnd(0, maxY);
 
     let score = 0;
     for (const other of objs) {
       if (other === o || other.phase !== 'on') continue;
-      score += overlap(x - 6, y - 6, o.w + 12, o.h + 12,
-        other.x, other.y, other.w, other.h);
+      score += overlap(x - 6, yMid - 6, o.w + 12, o.h + 12,
+        other.x, other.yMid, other.w, other.h);
     }
-    if (score < bestScore) { bestScore = score; best = [x, y]; if (!score) break; }
+    if (score < bestScore) { bestScore = score; best = [x, yMid]; if (!score) break; }
   }
   o.x = best[0];
-  o.y = best[1];
+  o.yMid = best[1];
+  o.y = o.yMid - dir * o.dist / 2;   // travelled(0.5) === 0.5, so mid-life lands on yMid
 }
 
 // give an object a fresh look: image (or placeholder), size, distance, life, spot
@@ -302,8 +315,10 @@ function resetField() {
 }
 
 function draw(o, env) {
-  // a tile hanging over the edge of the panel fades out instead of being clipped
-  const edge = Math.min((o.y + o.h) / (o.h + 40), (AREA_H - o.y) / (o.h + 40), 1);
+  // a tile hanging over the edge of the panel fades by how much of it is outside,
+  // so anything fully inside — every object at mid-life — keeps its full opacity
+  const inside = (Math.min(o.y + o.h, AREA_H) - Math.max(o.y, 0)) / o.h;
+  const edge = smooth(clamp01(inside));
   o.node.style.transform = `translate3d(${o.x.toFixed(1)}px, ${o.y.toFixed(1)}px, 0)`;
   o.node.style.opacity = (o.peak * env * clamp01(edge)).toFixed(3);
 }
@@ -395,7 +410,8 @@ const CONTROLS = [
   { key: 'size', label: 'Object size (area)', min: 40, max: 280, step: 5, unit: 'px' },
   { key: 'sizeVar', label: 'Size variability', min: 0, max: 80, step: 5, unit: '%' },
   { key: 'life', label: 'Life time', min: 0.4, max: 10, step: 0.1, unit: 's' },
-  { key: 'lifeVar', label: 'Life variability', min: 0, max: 80, step: 5, unit: '%' }
+  { key: 'lifeVar', label: 'Life variability', min: 0, max: 80, step: 5, unit: '%' },
+  { key: 'ease', label: 'Easing', min: -1, max: 1, step: 0.1, unit: '' }
 ];
 
 function paintControl(c) {
