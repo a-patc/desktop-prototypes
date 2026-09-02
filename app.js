@@ -112,7 +112,8 @@ const el = {
   cardText: document.getElementById('loader-card-text'),
   cardBtnText: document.getElementById('loader-card-btn-text'),
   dbgState: document.getElementById('dbg-state'),
-  dbgTime: document.getElementById('dbg-time')
+  dbgTime: document.getElementById('dbg-time'),
+  chkDedupe: document.getElementById('chk-dedupe')
 };
 
 /* ── window scaling ───────────────────────────────────────── */
@@ -206,7 +207,8 @@ function makeObject() {
     node, img, icon, time, badge,
     x: 0, y: 0, yMid: 0, w: 90, h: 180,
     dist: 136, life: 2, peak: 0.6,
-    phase: 'off', p: 0, t: 0, tOff: 0
+    phase: 'off', p: 0, t: 0, tOff: 0,
+    imgNum: null
   };
   objs.push(o);
   spawn(o);
@@ -254,9 +256,23 @@ function place(o) {
   o.y = o.yMid - dir * o.dist / 2;   // travelled(0.5) === 0.5, so mid-life lands on yMid
 }
 
+// an image already showing on another live tile can't be reused — once every
+// found result is already on screen, later spawns fall back to a placeholder
+// instead of showing a duplicate
+function pickUnusedImage(o, pool) {
+  if (!el.chkDedupe.checked) return pick(pool);
+  const inUse = new Set();
+  for (const other of objs) {
+    if (other !== o && other.phase === 'on' && other.imgNum != null) inUse.add(other.imgNum);
+  }
+  const available = pool.filter(n => !inUse.has(n));
+  return available.length ? pick(available) : null;
+}
+
 // give an object a fresh look: image (or placeholder), size, distance, life, spot
 function spawn(o) {
   const pool = currentPool();
+  const n = pool ? pickUnusedImage(o, pool) : null;
 
   o.life = vary(params.life, params.lifeVar);
   o.dist = vary(params.travel, params.travelVar);
@@ -266,7 +282,8 @@ function spawn(o) {
   const side = vary(params.size, params.sizeVar);
   let aspect;
 
-  if (!pool) {
+  o.imgNum = n;
+  if (n == null) {
     o.node.className = 'dtile dtile--empty';
     o.img.style.display = 'none';
     o.icon.style.display = 'block';
@@ -275,7 +292,6 @@ function spawn(o) {
     aspect = rnd(0.38, 0.72);
     o.peak = rnd(0.3, 0.5);
   } else {
-    const n = pick(pool);
     o.node.className = 'dtile';
     o.img.src = src(n);
     o.img.style.display = 'block';
@@ -289,7 +305,7 @@ function spawn(o) {
   o.h = Math.round(Math.min(side / k, AREA_H - 40));
   o.w = Math.round(o.h * aspect);
 
-  if (pool) {
+  if (n != null) {
     o.time.style.display = o.h >= 100 ? 'block' : 'none';
     o.badge.style.display = o.h >= 120 && Math.random() < 0.12 ? 'block' : 'none';
   }
