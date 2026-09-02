@@ -1,12 +1,16 @@
 /* ─────────────────────────────────────────────────────────────
    Objects search — loading animation demo
 
-   Timeline
+   Timeline (each wave joins the pool — nothing drops back out)
      0 – 10s   no results yet      → placeholder tiles ("Objects" icon)
-    10 – 20s   images  9 – 13
-    20 – 30s   images 15 – 20
-    30 – 40s   images  1 – 8
+    10 – 20s   + images  9 – 13
+    20 – 30s   + images 15 – 20
+    30 – 40s   + images  1 – 8
     40s        search finishes by itself
+
+   Every image is shown at least once as soon as its wave arrives — it takes
+   priority over the rest of the pool until it has appeared, then it drops
+   into the normal random rotation alongside everything found so far.
 
    Every object fades in over the first half of its life and out over
    the second half, and is placed by where it sits at mid-life so the
@@ -135,9 +139,8 @@ let finalClock = 0;       // ms into re-ranking
 let speedMult = 1;        // demo fast-forward (timeline only)
 
 function currentPool() {
-  let pool = null;
-  for (const p of PHASES) if (clock >= p.at) pool = p.pool;
-  return pool;
+  const pool = PHASES.filter(p => clock >= p.at && p.pool).flatMap(p => p.pool);
+  return pool.length ? pool : null;
 }
 
 function show(state) {
@@ -179,6 +182,7 @@ function reset() {
 /* ── drift field ──────────────────────────────────────────── */
 
 const objs = [];
+const seen = new Set();   // images shown at least once this search — reset per search
 
 function makeObject() {
   const node = document.createElement('div');
@@ -258,15 +262,23 @@ function place(o) {
 
 // an image already showing on another live tile can't be reused — once every
 // found result is already on screen, later spawns fall back to a placeholder
-// instead of showing a duplicate
+// instead of showing a duplicate. Among what's left, an image that hasn't
+// appeared yet always wins over one that has, so a newly-arrived wave gets
+// shown at least once before the field settles into picking at random.
 function pickUnusedImage(o, pool) {
   if (!el.chkDedupe.checked) return pick(pool);
+
   const inUse = new Set();
   for (const other of objs) {
     if (other !== o && other.phase === 'on' && other.imgNum != null) inUse.add(other.imgNum);
   }
   const available = pool.filter(n => !inUse.has(n));
-  return available.length ? pick(available) : null;
+  if (!available.length) return null;
+
+  const unseen = available.filter(n => !seen.has(n));
+  const n = pick(unseen.length ? unseen : available);
+  seen.add(n);
+  return n;
 }
 
 // give an object a fresh look: image (or placeholder), size, distance, life, spot
@@ -323,6 +335,7 @@ function spawn(o) {
 }
 
 function resetField() {
+  seen.clear();
   ensureCount();
   for (const o of objs) {
     spawn(o);
