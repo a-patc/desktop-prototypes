@@ -122,15 +122,26 @@
             <div class="drift" id="drift"></div>
             <div class="loader-card" id="loader-card">
               <p id="loader-card-text">Searching...</p>
-              <button class="text-btn" id="btn-stop-card">
-                <span id="loader-card-btn-text">Finish</span><img src="assets/playback-stop.svg" alt="">
-              </button>
+              <p class="loader-card__count">
+                <span id="results-counter">~0 results</span>
+                <span class="info-icon" tabindex="0">?
+                  <span class="info-icon__tip">Results are reevaluated when the search is complete, so the final number may change.</span>
+                </span>
+              </p>
+              <div class="loader-card__active" id="loader-card-active">
+                <div class="loader-card__progress">
+                  <span class="loader-card__progress-fill" id="progress-fill"></span>
+                </div>
+                <button class="text-btn" id="btn-stop-card">
+                  <span id="loader-card-btn-text">Finish</span><img src="assets/playback-stop.svg" alt="">
+                </button>
+              </div>
             </div>
           </section>
 
           <!-- state: results -->
           <section class="state state--results" id="state-results">
-            <p class="panel-title">98 results</p>
+            <p class="panel-title">19 results</p>
             <button class="icon-btn panel-action panel-action--icon" id="btn-restart" title="Search again">
               <img src="assets/refresh.svg" alt="">
             </button>

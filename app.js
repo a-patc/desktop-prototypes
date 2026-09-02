@@ -48,6 +48,23 @@ const PHASES = [
   { at: 30000, pool: [1, 2, 3, 4, 5, 6, 7, 8] }
 ];
 
+// approximate result count shown top-left during the search: the number of
+// distinct results found so far (the pool), plus a buffer of up to 10% more
+// to hint that a few more are still likely out there. The buffer is re-rolled
+// only when the pool grows, so it holds steady rather than flickering.
+let lastPoolSize = -1;
+let poolBonus = 0;
+
+function approxCount() {
+  const pool = currentPool();
+  const size = pool ? pool.length : 0;
+  if (size !== lastPoolSize) {
+    lastPoolSize = size;
+    poolBonus = size ? Math.round(size * rnd(0, 0.1)) : 0;
+  }
+  return size + poolBonus;
+}
+
 const GROUPS = [
   { label: 'Very High', items: [1, 2, 3, 4] },
   { label: 'High', items: [5, 6, 7, 8] },
@@ -117,7 +134,9 @@ const el = {
   cardBtnText: document.getElementById('loader-card-btn-text'),
   dbgState: document.getElementById('dbg-state'),
   dbgTime: document.getElementById('dbg-time'),
-  chkDedupe: document.getElementById('chk-dedupe')
+  chkDedupe: document.getElementById('chk-dedupe'),
+  resultsCounter: document.getElementById('results-counter'),
+  progressFill: document.getElementById('progress-fill')
 };
 
 /* ── window scaling ───────────────────────────────────────── */
@@ -155,6 +174,10 @@ function startSearch() {
   el.cardText.textContent = 'Searching...';
   el.cardBtnText.textContent = 'Finish';
   el.card.classList.remove('is-final');
+  el.resultsCounter.textContent = '~0 results';
+  el.progressFill.style.width = '0%';
+  lastPoolSize = -1;
+  poolBonus = 0;
   resetField();
   show(el.loading);
 }
@@ -165,6 +188,7 @@ function startFinalizing() {
   finalClock = 0;
   el.cardText.textContent = 'Finalizing results...';
   el.card.classList.add('is-final');
+  el.progressFill.style.width = '100%';
 }
 
 function showResults() {
@@ -386,6 +410,9 @@ function frame(now) {
   if (mode === 'search') {
     clock += dt * speedMult * 1000;
     if (clock >= SEARCH_MS) { clock = SEARCH_MS; startFinalizing(); }
+    el.progressFill.style.width = (clock / SEARCH_MS * 100) + '%';
+    const n = approxCount();
+    el.resultsCounter.textContent = `~${n} result${n === 1 ? '' : 's'}`;
   } else if (mode === 'final') {
     finalClock += dt * speedMult * 1000;
     if (finalClock >= FINAL_MS) showResults();
