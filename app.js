@@ -65,6 +65,22 @@ function approxCount() {
   return size + poolBonus;
 }
 
+// the counter shows which bucket the approximate count falls into rather than
+// the exact number, so it only updates a handful of times over a search
+// instead of ticking up constantly — and holds at "100+" once past the top.
+const COUNT_RANGES = [
+  { max: 0, label: '0 results' },
+  { max: 10, label: '1-10 results' },
+  { max: 25, label: '11-25 results' },
+  { max: 50, label: '26-50 results' },
+  { max: 100, label: '51-100 results' }
+];
+
+function resultsRangeLabel(n) {
+  for (const r of COUNT_RANGES) if (n <= r.max) return r.label;
+  return '100+ results';
+}
+
 const GROUPS = [
   { label: 'Very High', items: [1, 2, 3, 4] },
   { label: 'High', items: [5, 6, 7, 8] },
@@ -174,7 +190,7 @@ function startSearch() {
   el.cardText.textContent = 'Searching...';
   el.cardBtnText.textContent = 'Finish';
   el.card.classList.remove('is-final');
-  el.resultsCounter.textContent = '~0 results';
+  el.resultsCounter.textContent = '0 results';
   el.progressFill.style.width = '0%';
   lastPoolSize = -1;
   poolBonus = 0;
@@ -411,8 +427,7 @@ function frame(now) {
     clock += dt * speedMult * 1000;
     if (clock >= SEARCH_MS) { clock = SEARCH_MS; startFinalizing(); }
     el.progressFill.style.width = (clock / SEARCH_MS * 100) + '%';
-    const n = approxCount();
-    el.resultsCounter.textContent = `~${n} result${n === 1 ? '' : 's'}`;
+    el.resultsCounter.textContent = resultsRangeLabel(approxCount());
   } else if (mode === 'final') {
     finalClock += dt * speedMult * 1000;
     if (finalClock >= FINAL_MS) showResults();

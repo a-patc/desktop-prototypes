@@ -479,47 +479,9 @@ html, body {
 }
 .loader-card .loader-card__count {
   margin-top: -12px;
-  display: flex; align-items: center; justify-content: center; gap: 5px;
   font-size: 15px; font-weight: 500; line-height: 20px;
   color: var(--c-4);
   font-variant-numeric: tabular-nums;
-}
-
-.info-icon {
-  position: relative;
-  display: inline-flex; align-items: center; justify-content: center;
-  flex: none;
-  width: 14px; height: 14px;
-  border-radius: 50%;
-  border: 1px solid var(--c-6);
-  font-size: 10px; font-weight: 500; line-height: 1;
-  font-family: var(--font);
-  color: var(--c-4);
-  cursor: default;
-}
-.info-icon__tip {
-  position: absolute;
-  left: 50%; bottom: calc(100% + 8px);
-  transform: translateX(-50%);
-  width: 220px;
-  padding: 8px 10px;
-  background: var(--bg-7);
-  border-radius: 6px;
-  font-size: 11px; font-weight: 400; line-height: 16px;
-  color: var(--c-2);
-  text-align: left;
-  white-space: normal;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 120ms ease;
-  pointer-events: none;
-  filter: drop-shadow(0 8px 16px rgba(0,0,0,0.5));
-  z-index: 2;
-}
-.info-icon:hover .info-icon__tip,
-.info-icon:focus .info-icon__tip {
-  opacity: 1;
-  visibility: visible;
 }
 .loader-card__active {
   display: flex; flex-direction: column; align-items: center; gap: 24px;
