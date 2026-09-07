@@ -92,12 +92,12 @@ const GROUPS = [
 const DEFAULTS = {
   travel: 400,   // px  — how far an object drifts during its life
   travelVar: 35,    // %   — spread around that distance
-  count: 14,    //     — how many objects live in the field
+  count: 20,    //     — how many objects live in the field
   size: 135,   // px  — side of an equal-area square (all objects get the same area)
   sizeVar: 20,    // %
   life: 4,     // s   — appear + disappear
   lifeVar: 30,    // %
-  ease: -1      // -1 … +1 — how speed relates to opacity (see `travelled`)
+  ease: -0.3   // -1 … +1 — how speed relates to opacity (see `travelled`)
 };
 const params = { ...DEFAULTS };
 
