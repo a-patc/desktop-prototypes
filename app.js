@@ -89,10 +89,12 @@ const GROUPS = [
 
 /* ── tunable field parameters (wired to the sliders) ──────── */
 
+const DENSITY_UNIT = 225 * 225;  // px² — "1 object per 225×225 square" is density 1
+
 const DEFAULTS = {
   travel: 400,   // px  — how far an object drifts during its life
   travelVar: 35,    // %   — spread around that distance
-  count: 14,    //     — how many objects live in the field
+  density: 1,     //     — objects per 225×225px of panel space; count follows the panel size
   size: 135,   // px  — side of an equal-area square (all objects get the same area)
   sizeVar: 20,    // %
   life: 4,     // s   — appear + disappear
@@ -103,8 +105,16 @@ const params = { ...DEFAULTS };
 
 /* ── field geometry ───────────────────────────────────────── */
 
-const AREA_W = 786;          // center panel width
-const AREA_H = 904;          // the field owns the whole panel now
+const BASE_CENTER_W = 786;   // center panel size at the "small" panel size
+const BASE_CENTER_H = 904;
+const PANEL_LEFT_W = 372;    // fixed — panel size only affects the center panel
+const PANEL_RIGHT_W = 480;
+const HEADER_H = 56;         // header (48) + subheader (8)
+
+const PANEL_SIZES = { small: 1, medium: 1.25, large: 1.5625 }; // each step is +25% on the last
+
+let AREA_W = BASE_CENTER_W;  // the field's current bounds — tracks the panel size
+let AREA_H = BASE_CENTER_H;
 const PAD = 16;
 const FINAL_SPEED_X = 2;     // ×2 and upwards while finalizing
 const GAP = [0.1, 1.2];      // s — pause before an object reappears
@@ -159,10 +169,11 @@ const el = {
 
 function fit() {
   const chrome = document.querySelector('.panelbar').offsetHeight + 56;
-  const s = Math.min(1, (innerWidth - 48) / 1638, (innerHeight - chrome) / 960);
+  const w = el.window.offsetWidth, h = el.window.offsetHeight;
+  const s = Math.min(1, (innerWidth - 48) / w, (innerHeight - chrome) / h);
   el.window.style.transform = `scale(${s})`;
-  el.scaler.style.width = 1638 * s + 'px';
-  el.scaler.style.height = 960 * s + 'px';
+  el.scaler.style.width = w * s + 'px';
+  el.scaler.style.height = h * s + 'px';
 }
 addEventListener('resize', fit);
 
@@ -260,7 +271,7 @@ function makeObject() {
 }
 
 function ensureCount() {
-  const want = Math.round(params.count);
+  const want = Math.round(params.density * (AREA_W * AREA_H) / DENSITY_UNIT);
   while (objs.length < want) makeObject();
   while (objs.length > want) objs.pop().node.remove();
 }
@@ -383,6 +394,22 @@ function resetField() {
   }
 }
 
+// resizes only the center panel; the left/right panels keep their width but
+// grow to the same height, and the rest of the UI stays at its fixed scale
+function setPanelSize(key) {
+  const mult = PANEL_SIZES[key];
+  AREA_W = Math.round(BASE_CENTER_W * mult);
+  AREA_H = Math.round(BASE_CENTER_H * mult);
+
+  el.window.style.setProperty('--center-w', AREA_W + 'px');
+  el.window.style.setProperty('--body-h', AREA_H + 'px');
+  el.window.style.setProperty('--window-w', (PANEL_LEFT_W + AREA_W + PANEL_RIGHT_W) + 'px');
+  el.window.style.setProperty('--window-h', (HEADER_H + AREA_H) + 'px');
+
+  resetField();
+  fit();
+}
+
 function draw(o, env) {
   // a tile hanging over the edge of the panel fades by how much of it is outside,
   // so anything fully inside — every object at mid-life — keeps its full opacity
@@ -477,7 +504,7 @@ function buildResults() {
 const CONTROLS = [
   { key: 'travel', label: 'Travel distance', min: 20, max: 700, step: 10, unit: 'px' },
   { key: 'travelVar', label: 'Travel variability', min: 0, max: 100, step: 5, unit: '%' },
-  { key: 'count', label: 'Number of objects', min: 1, max: 48, step: 1, unit: '' },
+  { key: 'density', label: 'Object density', min: 0.1, max: 3.5, step: 0.1, unit: '/225px²' },
   { key: 'size', label: 'Object size (area)', min: 40, max: 280, step: 5, unit: 'px' },
   { key: 'sizeVar', label: 'Size variability', min: 0, max: 80, step: 5, unit: '%' },
   { key: 'life', label: 'Life time', min: 0.4, max: 10, step: 0.1, unit: 's' },
@@ -506,7 +533,7 @@ function buildControls() {
     input.value = params[c.key];
     input.addEventListener('input', () => {
       params[c.key] = Number(input.value);
-      if (c.key === 'count') ensureCount();
+      if (c.key === 'density') ensureCount();
       paintControl(c);
     });
     paintControl(c);
@@ -542,6 +569,12 @@ document.querySelector('.panelbar').addEventListener('click', e => {
     speedMult = Number(btn.dataset.speed);
     for (const b of document.querySelectorAll('[data-speed]')) b.classList.remove('is-on');
     btn.classList.add('is-on');
+    return;
+  }
+  if (btn.dataset.panelSize) {
+    for (const b of document.querySelectorAll('[data-panel-size]')) b.classList.remove('is-on');
+    btn.classList.add('is-on');
+    setPanelSize(btn.dataset.panelSize);
     return;
   }
   if (btn.dataset.act === 'start') startSearch();

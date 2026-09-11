@@ -54,8 +54,8 @@ html, body {
 
 .window {
   position: relative;
-  width: 1638px;
-  height: 960px;
+  width: var(--window-w, 1638px);
+  height: var(--window-h, 960px);
   background: var(--bg-4);
   border: 0.5px solid rgba(0,0,0,0.38);
   border-radius: 8px;
@@ -175,7 +175,7 @@ html, body {
 .body {
   position: absolute;
   left: 0; right: 0; top: 56px;
-  height: 904px;
+  height: var(--body-h, 904px);
   display: flex;
 }
 
@@ -184,7 +184,7 @@ html, body {
 .panel-left {
   position: relative;
   width: 372px;
-  height: 904px;
+  height: var(--body-h, 904px);
   flex: none;
   background: var(--bg-3);
   border-right: 1px solid var(--bg-1);
@@ -331,8 +331,8 @@ html, body {
 
 .panel-center {
   position: relative;
-  width: 786px;
-  height: 904px;
+  width: var(--center-w, 786px);
+  height: var(--body-h, 904px);
   flex: none;
   background: var(--bg-3);
   border-right: 1px solid var(--bg-1);
@@ -568,7 +568,7 @@ html, body {
 .panel-right {
   position: relative;
   width: 480px;
-  height: 904px;
+  height: var(--body-h, 904px);
   flex: none;
   background: var(--bg-4);
   border-left: 1px solid var(--bg-5);
