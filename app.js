@@ -502,7 +502,7 @@ function buildResults() {
 const CONTROLS = [
   { key: 'travel', label: 'Travel distance', min: 20, max: 700, step: 10, unit: 'px' },
   { key: 'travelVar', label: 'Travel variability', min: 0, max: 100, step: 5, unit: '%' },
-  { key: 'spacing', label: 'Object spacing (area)', min: 100, max: 750, step: 25, unit: 'px' },
+  { key: 'spacing', label: '1 object per px²', min: 100, max: 750, step: 25, unit: 'px²' },
   { key: 'size', label: 'Object size (area)', min: 40, max: 280, step: 5, unit: 'px' },
   { key: 'sizeVar', label: 'Size variability', min: 0, max: 80, step: 5, unit: '%' },
   { key: 'life', label: 'Life time', min: 0.4, max: 10, step: 0.1, unit: 's' },
