@@ -89,12 +89,10 @@ const GROUPS = [
 
 /* ── tunable field parameters (wired to the sliders) ──────── */
 
-const DENSITY_UNIT = 225 * 225;  // px² — "1 object per 225×225 square" is density 1
-
 const DEFAULTS = {
   travel: 400,   // px  — how far an object drifts during its life
   travelVar: 35,    // %   — spread around that distance
-  density: 1,     //     — objects per 225×225px of panel space; count follows the panel size
+  spacing: 225,   // px  — side of the area block allotted per object (squared for px²); count follows the panel size
   size: 135,   // px  — side of an equal-area square (all objects get the same area)
   sizeVar: 20,    // %
   life: 4,     // s   — appear + disappear
@@ -271,7 +269,7 @@ function makeObject() {
 }
 
 function ensureCount() {
-  const want = Math.round(params.density * (AREA_W * AREA_H) / DENSITY_UNIT);
+  const want = Math.round((AREA_W * AREA_H) / (params.spacing * params.spacing));
   while (objs.length < want) makeObject();
   while (objs.length > want) objs.pop().node.remove();
 }
@@ -504,7 +502,7 @@ function buildResults() {
 const CONTROLS = [
   { key: 'travel', label: 'Travel distance', min: 20, max: 700, step: 10, unit: 'px' },
   { key: 'travelVar', label: 'Travel variability', min: 0, max: 100, step: 5, unit: '%' },
-  { key: 'density', label: 'Object density', min: 0.1, max: 3.5, step: 0.1, unit: '/225px²' },
+  { key: 'spacing', label: 'Object spacing (area)', min: 100, max: 750, step: 25, unit: 'px' },
   { key: 'size', label: 'Object size (area)', min: 40, max: 280, step: 5, unit: 'px' },
   { key: 'sizeVar', label: 'Size variability', min: 0, max: 80, step: 5, unit: '%' },
   { key: 'life', label: 'Life time', min: 0.4, max: 10, step: 0.1, unit: 's' },
@@ -533,7 +531,7 @@ function buildControls() {
     input.value = params[c.key];
     input.addEventListener('input', () => {
       params[c.key] = Number(input.value);
-      if (c.key === 'density') ensureCount();
+      if (c.key === 'spacing') ensureCount();
       paintControl(c);
     });
     paintControl(c);
